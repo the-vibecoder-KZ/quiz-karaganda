@@ -79,6 +79,10 @@ SITES = [
         "name": "Вау Квиз",
         "url": "https://krg.wowquiz.ru/schedule",
         "engine": "nuxt",
+        # __NUXT_DATA__ у них пустой — расписание подгружается отдельным
+        # JS-запросом уже после первой отрисовки, поэтому встроенный
+        # JSON бесполезен и нужно сразу идти в рендер браузером
+        "skip_embedded_json": True,
     },
     {
         "key": "chillquiz",
@@ -157,11 +161,33 @@ async def render_with_playwright(url: str, wait_selector: str | None = None, cit
 
         if city_click:
             try:
-                await page.click("text=Город", timeout=5000)
-                await page.wait_for_timeout(500)
-                await page.click(f"text={city_click}", timeout=5000)
-                await page.wait_for_timeout(2000)
+                # Диалог выбора города (Radix Dialog) обычно открывается
+                # сам по себе при первой загрузке. Кликаем по кнопке с
+                # точным текстом города именно ВНУТРИ диалога, чтобы не
+                # промахнуться мимо других мест на странице с похожим
+                # текстом.
+                dialog = page.get_by_role("dialog")
+                clicked = False
+                try:
+                    await dialog.wait_for(state="visible", timeout=4000)
+                    await dialog.get_by_role("button", name=city_click, exact=True).click(timeout=4000)
+                    clicked = True
+                except Exception:
+                    pass
+
+                if not clicked:
+                    # Диалога не было сам по себе — открываем через "Город"
+                    await page.click("text=Город", timeout=5000)
+                    await page.wait_for_timeout(500)
+                    dialog = page.get_by_role("dialog")
+                    await dialog.get_by_role("button", name=city_click, exact=True).click(timeout=5000)
+
+                # Ждём, пока диалог реально закроется — это подтверждает,
+                # что выбор города применился, а не просто промахнулся клик.
+                await dialog.wait_for(state="hidden", timeout=8000)
+                await page.wait_for_timeout(1500)
                 await page.wait_for_load_state("networkidle", timeout=15000)
+                print(f"      [+] Город «{city_click}» выбран, диалог закрылся.")
             except Exception as e:
                 print(f"      [!] Не удалось выбрать город «{city_click}»: {e}")
 
@@ -438,11 +464,65 @@ def parse_quizplease_text(text: str, today: dt.date | None = None) -> list[dict]
     return events
 
 
+def parse_chillquiz_text(text: str) -> list[dict]:
+    """Парсер для Chill Quiz. Список сразу весь на странице (без
+    пагинации), но сайт зависит от выбранного в интерфейсе города —
+    выбор "Караганда" делается кликом в render_with_playwright()
+    (см. site["needs_city_click"]). Формат одной карточки:
+        Открыта регистрация
+        Человек-паук
+        14 августа 2026 г.
+        20:00
+        Garage Music Bar
+        Кино
+        49/120 мест занято
+        71 свободно
+        3500 ₸
+        за человека
+        Подробнее и регистрация
+        →
+    Время иногда пишется без минут (просто "18" вместо "18:00")."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    date_re = re.compile(r'^(\d{1,2}) ([а-яё]+) (\d{4}) г\.$')
+    price_re = re.compile(r'^([\d\s]+)\s*₸$')
+    events = []
+    n = len(lines)
+    for i, l in enumerate(lines):
+        m = date_re.match(l)
+        if not m:
+            continue
+        day, month_name, year = m.groups()
+        month = MONTHS_RU.get(month_name.lower())
+        if not month or i < 1 or i + 2 >= n:
+            continue
+        title = lines[i - 1]
+        time_line = lines[i + 1]
+        tm = re.match(r'^(\d{1,2})(?::(\d{2}))?$', time_line)
+        if not tm:
+            continue
+        hh = int(tm.group(1))
+        mm = int(tm.group(2)) if tm.group(2) else 0
+        venue = lines[i + 2]
+        price = None
+        for j in range(i + 3, min(i + 8, n)):
+            pm = price_re.match(lines[j])
+            if pm:
+                price = int(pm.group(1).replace(" ", ""))
+                break
+        when = dt.datetime(int(year), month, int(day), hh, mm)
+        events.append({
+            "source": "Chill Quiz", "when": when, "title": title,
+            "price": price, "place": venue,
+        })
+    return events
+
+
 # Парсеры, применяемые к тексту, полученному через рендер в браузере
 RENDER_TEXT_PARSERS = {
     "mohito": parse_mohito_text,
     "smuzi": parse_smuzi_text,
     "quizplease": parse_quizplease_text,
+    "chillquiz": parse_chillquiz_text,
 }
 
 
@@ -453,7 +533,8 @@ async def process_site(site: dict) -> list[dict]:
     # (а не от URL) — встроенный JSON пропускаем, он покажет не тот
     # город, сразу идём в рендер с кликом по городу.
     city_click = site.get("needs_city_click")
-    if not city_click:
+    skip_embedded = city_click or site.get("skip_embedded_json")
+    if not skip_embedded:
         embedded = try_fetch_embedded_json(site["url"])
         if embedded:
             out_path = DEBUG_DIR / f"{site['key']}_embedded.json"
