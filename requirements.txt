@@ -1,1 +1,4 @@
-requests beautifulsoup4 playwright nest_asyncio
+requests
+beautifulsoup4
+playwright
+nest_asyncio
