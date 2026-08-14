@@ -2,11 +2,12 @@ name: Обновить расписание квизов
 
 on:
   schedule:
+    # каждые 6 часов (время UTC)
     - cron: "0 */6 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch: {}  # позволяет запустить вручную из вкладки Actions
 
 permissions:
-  contents: write
+  contents: write  # нужно, чтобы workflow мог закоммитить обновлённый schedule.json
 
 jobs:
   scrape:
@@ -25,6 +26,15 @@ jobs:
 
       - name: Запустить сборщик
         run: python scrape.py
+
+      - name: Выгрузить debug-файлы как артефакт
+        if: always()  # выгружаем, даже если предыдущий шаг упал с ошибкой
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-files
+          path: debug/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Закоммитить schedule.json
         run: |
