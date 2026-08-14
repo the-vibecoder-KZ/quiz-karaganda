@@ -74,6 +74,21 @@ SITES = [
         "url": "https://krg.smuzi-quiz.com/games",
         "engine": "unknown",
     },
+    {
+        "key": "wowquiz",
+        "name": "Вау Квиз",
+        "url": "https://krg.wowquiz.ru/schedule",
+        "engine": "nuxt",
+    },
+    {
+        "key": "chillquiz",
+        "name": "Chill Quiz",
+        "url": "https://chillquiz.kz/quizzes",
+        "engine": "next",
+        # по умолчанию сайт показывает другой город — нужно кликнуть
+        # "Город" -> "Караганда" перед тем, как снимать расписание
+        "needs_city_click": "Караганда",
+    },
 ]
 
 
@@ -115,13 +130,18 @@ def try_fetch_embedded_json(url: str) -> dict | None:
     return None
 
 
-async def render_with_playwright(url: str, wait_selector: str | None = None):
+async def render_with_playwright(url: str, wait_selector: str | None = None, city_click: str | None = None):
     """Открываем страницу настоящим headless-браузером, ждём отрисовки
     и возвращаем видимый текст body. Требует `playwright install chromium`.
 
     Используем ИМЕННО async API: в Colab/Jupyter уже крутится свой
     event loop, а синхронный Playwright API с этим несовместим и
-    падает с ошибкой "Sync API inside the asyncio loop"."""
+    падает с ошибкой "Sync API inside the asyncio loop".
+
+    city_click: если задано (например, "Караганда") — перед снятием
+    текста пытаемся кликнуть по элементу "Город", затем по элементу с
+    этим названием города (для сайтов, где список игр зависит от
+    выбранного в интерфейсе города, а не от URL)."""
     from playwright.async_api import async_playwright
 
     async with async_playwright() as p:
@@ -134,6 +154,17 @@ async def render_with_playwright(url: str, wait_selector: str | None = None):
                 await page.wait_for_selector(wait_selector, timeout=10000)
         except Exception:
             pass
+
+        if city_click:
+            try:
+                await page.click("text=Город", timeout=5000)
+                await page.wait_for_timeout(500)
+                await page.click(f"text={city_click}", timeout=5000)
+                await page.wait_for_timeout(2000)
+                await page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception as e:
+                print(f"      [!] Не удалось выбрать город «{city_click}»: {e}")
+
         # прокрутим страницу вниз — вдруг список игр подгружается лениво
         for _ in range(5):
             await page.mouse.wheel(0, 2000)
@@ -418,32 +449,40 @@ RENDER_TEXT_PARSERS = {
 async def process_site(site: dict) -> list[dict]:
     print(f"\n=== {site['name']} ({site['url']}) ===")
 
-    embedded = try_fetch_embedded_json(site["url"])
-    if embedded:
-        out_path = DEBUG_DIR / f"{site['key']}_embedded.json"
-        with open(out_path, "w", encoding="utf-8") as f:
-            if isinstance(embedded["data"], str):
-                f.write(embedded["data"])
+    # Сайты, где список игр зависит от выбранного в интерфейсе города
+    # (а не от URL) — встроенный JSON пропускаем, он покажет не тот
+    # город, сразу идём в рендер с кликом по городу.
+    city_click = site.get("needs_city_click")
+    if not city_click:
+        embedded = try_fetch_embedded_json(site["url"])
+        if embedded:
+            out_path = DEBUG_DIR / f"{site['key']}_embedded.json"
+            with open(out_path, "w", encoding="utf-8") as f:
+                if isinstance(embedded["data"], str):
+                    f.write(embedded["data"])
+                else:
+                    json.dump(embedded["data"], f, ensure_ascii=False, indent=2)
+            print(f"  [+] Нашли встроенный JSON-стейт ({embedded['engine']}) -> {out_path}")
+
+            parser = SITE_PARSERS.get(site["key"])
+            if parser and isinstance(embedded["data"], dict):
+                try:
+                    events = parser(embedded["data"])
+                    print(f"      Распарсили {len(events)} игр(ы).")
+                    return events
+                except Exception as e:
+                    print(f"      [!] Не смогли распарсить встроенный JSON: {e}")
             else:
-                json.dump(embedded["data"], f, ensure_ascii=False, indent=2)
-        print(f"  [+] Нашли встроенный JSON-стейт ({embedded['engine']}) -> {out_path}")
+                print("      Пришлите этот файл мне — извлеку из него расписание точечно.")
+            return []
 
-        parser = SITE_PARSERS.get(site["key"])
-        if parser and isinstance(embedded["data"], dict):
-            try:
-                events = parser(embedded["data"])
-                print(f"      Распарсили {len(events)} игр(ы).")
-                return events
-            except Exception as e:
-                print(f"      [!] Не смогли распарсить встроенный JSON: {e}")
-        else:
-            print("      Пришлите этот файл мне — извлеку из него расписание точечно.")
-        return []
-
-    print("  [i] Встроенного JSON не нашли, рендерим через браузер (Playwright)...")
+    if city_click:
+        print(f"  [i] Сайт зависит от выбора города в интерфейсе — рендерим через браузер, выбираем «{city_click}»...")
+    else:
+        print("  [i] Встроенного JSON не нашли, рендерим через браузер (Playwright)...")
 
     try:
-        text, html = await render_with_playwright(site["url"])
+        text, html = await render_with_playwright(site["url"], city_click=city_click)
     except ModuleNotFoundError:
         print("  [!] Playwright не установлен. Выполните:")
         print("        pip install playwright")
@@ -559,4 +598,3 @@ if __name__ == "__main__":
         import nest_asyncio
         nest_asyncio.apply()
         asyncio.get_event_loop().run_until_complete(main())
-
