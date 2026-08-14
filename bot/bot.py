@@ -34,6 +34,30 @@ WEEKDAYS_RU = ["Понедельник", "Вторник", "Среда", "Чет
 
 app = Flask(__name__)
 
+BOT_COMMANDS = [
+    {"command": "today", "description": "Квизы на сегодня (или /today 16.08 — на дату)"},
+    {"command": "week", "description": "Квизы на ближайшие 7 дней"},
+    {"command": "help", "description": "Что умеет бот"},
+]
+
+
+def register_commands() -> None:
+    """Регистрируем список команд в Telegram, чтобы они всплывали
+    подсказкой при вводе "/" в чате с ботом. Достаточно вызвать один
+    раз (или при каждом старте сервиса — это безопасно, Telegram просто
+    перезапишет список тем же самым)."""
+    try:
+        requests.post(
+            f"{TELEGRAM_API}/setMyCommands",
+            json={"commands": BOT_COMMANDS},
+            timeout=10,
+        )
+    except requests.RequestException as e:
+        print(f"[!] Не удалось зарегистрировать команды бота: {e}")
+
+
+register_commands()
+
 
 def fetch_schedule() -> dict:
     r = requests.get(SCHEDULE_JSON_URL, timeout=15)
@@ -107,10 +131,18 @@ def webhook():
 
     try:
         if text.startswith("/start") or text.startswith("/help"):
+            sources_line = "разных сайтов"
+            try:
+                data = fetch_schedule()
+                sources = sorted({e["source"] for e in data["events"]})
+                if sources:
+                    sources_line = ", ".join(sources)
+            except requests.RequestException:
+                pass
             send_message(
                 chat_id,
-                "Привет! Я собираю расписание квизов по Караганде "
-                "(Квиз плиз!, Шейкер, Мохито, Смузи).\n\n"
+                f"Привет! Я собираю расписание квизов по Караганде "
+                f"с сайтов: {sources_line}.\n\n"
                 "Команды:\n"
                 "/today — квизы на сегодня (можно указать дату: /today 16.08)\n"
                 "/week — квизы на ближайшие 7 дней",
