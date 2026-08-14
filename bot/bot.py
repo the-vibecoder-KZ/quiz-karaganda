@@ -94,13 +94,15 @@ def format_day(events: list[dict], day: dt.date) -> str:
     header = f"<b>{WEEKDAYS_RU[day.weekday()]}, {day.strftime('%d.%m.%Y')}</b>"
     if not day_events:
         return f"{header}\nИгр не найдено."
-    lines = [header]
+    entries = []
     for e in day_events:
         when = dt.datetime.fromisoformat(e["when"])
         price = f", {e['price']}₸" if e.get("price") else ""
         place = f" — {e['place']}" if e.get("place") else ""
-        lines.append(f"{when.strftime('%H:%M')} [{e['source']}] {e['title']}{price}{place}")
-    return "\n".join(lines)
+        entries.append(
+            f"🎯 <b>{when.strftime('%H:%M')}</b> [{e['source']}] {e['title']}{price}{place}"
+        )
+    return header + "\n\n" + "\n\n".join(entries)
 
 
 def format_week(events: list[dict], start: dt.date) -> str:
