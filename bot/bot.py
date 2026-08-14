@@ -88,19 +88,31 @@ def parse_date_arg(arg: str | None, today: dt.date) -> dt.date | None:
     return None
 
 
+SOURCE_EMOJI = {
+    "Квиз, плиз!": "🍺",
+    "Шейкер Квиз": "🍸",
+    "Мохито Квиз": "🍹",
+    "Смузи Квиз": "🥤",
+    "Chill Quiz": "❄️",
+    "Вау Квиз": "🎉",
+}
+DEFAULT_EMOJI = "🎯"
+
+
 def format_day(events: list[dict], day: dt.date) -> str:
     day_events = [e for e in events if dt.datetime.fromisoformat(e["when"]).date() == day]
     day_events.sort(key=lambda e: e["when"])
-    header = f"<b>{WEEKDAYS_RU[day.weekday()]}, {day.strftime('%d.%m.%Y')}</b>"
+    header = f"📅 <b>{WEEKDAYS_RU[day.weekday()].upper()}, {day.strftime('%d.%m.%Y')}</b>"
     if not day_events:
         return f"{header}\nИгр не найдено."
     entries = []
     for e in day_events:
         when = dt.datetime.fromisoformat(e["when"])
+        emoji = SOURCE_EMOJI.get(e["source"], DEFAULT_EMOJI)
         price = f", {e['price']}₸" if e.get("price") else ""
         place = f" — {e['place']}" if e.get("place") else ""
         entries.append(
-            f"🎯 <b>{when.strftime('%H:%M')}</b> [{e['source']}] {e['title']}{price}{place}"
+            f"{emoji} <b>{when.strftime('%H:%M')}</b> [{e['source']}] {e['title']}{price}{place}"
         )
     return header + "\n\n" + "\n\n".join(entries)
 
