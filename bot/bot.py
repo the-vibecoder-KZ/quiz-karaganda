@@ -22,6 +22,7 @@
 
 import datetime as dt
 import os
+import time
 
 import requests
 from flask import Flask, request
@@ -60,7 +61,13 @@ register_commands()
 
 
 def fetch_schedule() -> dict:
-    r = requests.get(SCHEDULE_JSON_URL, timeout=15)
+    # raw.githubusercontent.com кэширует ответы на своей CDN (обычно на
+    # несколько минут, но иногда дольше). Добавляем cache-busting
+    # параметр и явно просим не отдавать кэш, чтобы бот всегда видел
+    # самую свежую версию schedule.json сразу после того, как её
+    # закоммитил сборщик.
+    url = f"{SCHEDULE_JSON_URL}?_={int(time.time())}"
+    r = requests.get(url, headers={"Cache-Control": "no-cache", "Pragma": "no-cache"}, timeout=15)
     r.raise_for_status()
     return r.json()
 
