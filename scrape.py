@@ -517,12 +517,62 @@ def parse_chillquiz_text(text: str) -> list[dict]:
     return events
 
 
+def parse_wowquiz_text(text: str, today: dt.date | None = None) -> list[dict]:
+    """Парсер для Вау Квиз. Список сразу весь на странице (без
+    пагинации). Формат одной карточки:
+        Вау Детектив
+        Подробнее / Правила /
+        Страница игры
+        Места есть
+        16 августа, воскресенье
+        19:30
+        3000 ₸/чел.
+        MODE
+        Толепова 3/12
+        Проложить маршрут
+        Регистрация
+        Иду без команды
+    Цена пишется с неразрывным пробелом (\\xa0) перед "₸"."""
+    today = today or dt.date.today()
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    date_re = re.compile(r'^(\d{1,2}) ([а-яё]+), (\S+)$')
+    price_re = re.compile(r'^([\d\s\xa0]+)\s*₸')
+    events = []
+    n = len(lines)
+    for i, l in enumerate(lines):
+        m = date_re.match(l)
+        if not m or i < 4 or i + 4 >= n:
+            continue
+        day, month_name, _wd = m.groups()
+        month = MONTHS_RU.get(month_name.lower())
+        if not month:
+            continue
+        title = lines[i - 4]
+        time_line = lines[i + 1]
+        tm = re.match(r'^(\d{1,2}):(\d{2})$', time_line)
+        if not tm:
+            continue
+        hh, mm = int(tm.group(1)), int(tm.group(2))
+        pm = price_re.match(lines[i + 2])
+        price = int(re.sub(r'[\s\xa0]', '', pm.group(1))) if pm else None
+        venue = lines[i + 3]
+        address = lines[i + 4]
+        year = _resolve_year(month, int(day), today)
+        when = dt.datetime(year, month, int(day), hh, mm)
+        events.append({
+            "source": "Вау Квиз", "when": when, "title": title,
+            "price": price, "place": f"{venue}, {address}",
+        })
+    return events
+
+
 # Парсеры, применяемые к тексту, полученному через рендер в браузере
 RENDER_TEXT_PARSERS = {
     "mohito": parse_mohito_text,
     "smuzi": parse_smuzi_text,
     "quizplease": parse_quizplease_text,
     "chillquiz": parse_chillquiz_text,
+    "wowquiz": parse_wowquiz_text,
 }
 
 
