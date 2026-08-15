@@ -2,11 +2,14 @@
 """
 Агрегатор квиз-игр по Караганде.
 
-Собирает расписание с 4 сайтов:
-- Квиз, плиз!  (krg.quizplease.com)     — Nuxt SPA
-- Шейкер Квиз  (karaganda.shakerquiz.ru) — Next.js SPA
-- Мохито Квиз  (krg.mohito-quiz.com)     — Tilda
-- Смузи Квиз   (krg.smuzi-quiz.com)      — неизвестная платформа
+Собирает расписание с сайтов (полный список — в SITES ниже и в README):
+- Квиз, плиз!   (krg.quizplease.com)      — Nuxt SPA
+- Шейкер Квиз   (karaganda.shakerquiz.ru) — Next.js SPA
+- Мохито Квиз   (krg.mohito-quiz.com)     — Tilda
+- Смузи Квиз    (krg.smuzi-quiz.com)      — неизвестная платформа
+- Chill Quiz    (chillquiz.kz)            — Next.js SPA, выбор города кликом
+- Вау Квиз      (krg.wowquiz.ru)          — Nuxt SPA
+- Эйнштейн Party (krg.albertparty.ru)     — сервер-рендер
 
 Стратегия для каждого сайта:
   1) Быстрый путь: скачать голый HTML и поискать встроенный JSON-стейт
@@ -572,6 +575,56 @@ def parse_wowquiz_text(text: str, today: dt.date | None = None) -> list[dict]:
     return events
 
 
+def parse_albertparty_text(text: str, today: dt.date | None = None) -> list[dict]:
+    """Парсер для Эйнштейн Party (albertparty.ru). Список сразу весь на
+    странице (без пагинации). Формат одной карточки:
+        СОВЕТСКИЕ КИНО И МУЛЬТФИЛЬМЫ
+        правила
+        18 августа
+        вторник
+        19:30
+        THE "БАНКА" BAR УЛ. САТТАРА ЕРУБАЕВА, 48
+        Где это?
+        3000 ₸
+        РЕГИСТРАЦИЯ
+        БЕЗ КОМАНДЫ
+        МЕСТА ЕСТЬ
+    Год в дате не пишется — вычисляем через _resolve_year(). Весь текст
+    на странице капсом, поэтому причёсываем через .title()."""
+    today = today or dt.date.today()
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    date_re = re.compile(r'^(\d{1,2}) ([а-яё]+)$')
+    price_re = re.compile(r'^([\d\s]+)\s*₸$')
+    events = []
+    n = len(lines)
+    for i, l in enumerate(lines):
+        m = date_re.match(l)
+        if not m or i < 2 or i + 5 >= n:
+            continue
+        day, month_name = m.groups()
+        month = MONTHS_RU.get(month_name.lower())
+        if not month:
+            continue
+        # Проверяем контекст (время сразу после, "правила" сразу до),
+        # чтобы не поймать случайную дату не из карточки игры.
+        time_line = lines[i + 2]
+        tm = re.match(r'^(\d{1,2}):(\d{2})$', time_line)
+        if not tm or lines[i - 1].lower() != "правила":
+            continue
+        title = lines[i - 2]
+        hh, mm = int(tm.group(1)), int(tm.group(2))
+        venue_line = lines[i + 3]
+        pm = price_re.match(lines[i + 5]) if i + 5 < n else None
+        price = int(pm.group(1).replace(" ", "")) if pm else None
+        year = _resolve_year(month, int(day), today)
+        when = dt.datetime(year, month, int(day), hh, mm)
+        events.append({
+            "source": "Эйнштейн Party", "when": when, "title": title.title(),
+            "price": price, "place": venue_line.title(),
+        })
+    return events
+
+
 # Парсеры, применяемые к тексту, полученному через рендер в браузере
 RENDER_TEXT_PARSERS = {
     "mohito": parse_mohito_text,
@@ -579,6 +632,7 @@ RENDER_TEXT_PARSERS = {
     "quizplease": parse_quizplease_text,
     "chillquiz": parse_chillquiz_text,
     "wowquiz": parse_wowquiz_text,
+    "albertparty": parse_albertparty_text,
 }
 
 
