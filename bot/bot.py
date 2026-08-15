@@ -190,6 +190,19 @@ def health():
     return "OK", 200
 
 
+def split_command(text: str) -> tuple[str, str]:
+    """Разбираем текст сообщения на команду и остаток (аргумент).
+    В группах Telegram дописывает к команде имя бота (например,
+    "/today@karaganda_quiz_bot 16.08") — этот суффикс нужно отрезать,
+    иначе он попадёт в аргумент вместо чистой даты."""
+    parts = text.split(maxsplit=1)
+    if not parts:
+        return "", ""
+    cmd = parts[0].split("@", 1)[0].lower()
+    arg = parts[1].strip() if len(parts) > 1 else ""
+    return cmd, arg
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     update = request.get_json(force=True, silent=True) or {}
@@ -200,15 +213,16 @@ def webhook():
     chat_id = message["chat"]["id"]
     text = (message.get("text") or "").strip()
     today = today_almaty()
+    cmd, arg = split_command(text)
 
     # Все команды ниже дёргают fetch_schedule() (сетевой запрос,
     # обычно 5-7 секунд) — сразу показываем "печатает...", чтобы не
     # выглядело, будто бот завис.
-    if text.startswith(("/today", "/weekend", "/days3", "/week", "/start", "/help")):
+    if cmd in ("/today", "/weekend", "/days3", "/week", "/start", "/help"):
         send_typing(chat_id)
 
     try:
-        if text.startswith("/start") or text.startswith("/help"):
+        if cmd in ("/start", "/help"):
             sources_line = "разных сайтов"
             try:
                 data = fetch_schedule()
@@ -227,25 +241,29 @@ def webhook():
                 "/days3 — квизы на 3 дня вперёд\n"
                 "/week — квизы на ближайшие 7 дней",
             )
-        elif text.startswith("/today"):
-            arg = text[len("/today"):].strip() or None
-            day = parse_date_arg(arg, today)
+        elif cmd == "/today":
+            day = parse_date_arg(arg or None, today)
             if day is None:
                 send_message(chat_id, "Не поняла дату. Формат: /today 16.08")
                 return "ok", 200
             data = fetch_schedule()
             send_message(chat_id, format_day(data["events"], day))
-        elif text.startswith("/weekend"):
+        elif cmd == "/weekend":
             data = fetch_schedule()
             send_message(chat_id, format_weekend(data["events"], today))
-        elif text.startswith("/days3"):
+        elif cmd == "/days3":
             data = fetch_schedule()
             send_message(chat_id, format_days(data["events"], today, 3))
-        elif text.startswith("/week"):
+        elif cmd == "/week":
             data = fetch_schedule()
             send_message(chat_id, format_week(data["events"], today))
         else:
-            send_message(chat_id, "Не поняла команду. Есть /today, /weekend, /days3 и /week.")
+            # В группах бот получает вообще все сообщения, не только
+            # команды — отвечаем "не поняла" только если это была
+            # попытка команды (начинается с "/"), иначе молча
+            # игнорируем обычную переписку в чате.
+            if cmd.startswith("/"):
+                send_message(chat_id, "Не поняла команду. Есть /today, /weekend, /days3 и /week.")
     except requests.RequestException as e:
         send_message(chat_id, f"Не получилось получить расписание: {e}")
 
