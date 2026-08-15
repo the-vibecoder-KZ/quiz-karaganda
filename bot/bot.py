@@ -6,9 +6,16 @@
 регулярно обновляет отдельный GitHub Actions workflow, см. scrape.py и
 .github/workflows/scrape.yml в корне проекта) и отвечает на команды:
 
-  /today  — квизы на сегодня (или на дату из аргумента: /today 16.08)
-  /week   — квизы на ближайшие 7 дней
-  /start  — краткая помощь
+  /today   — квизы на сегодня (или на дату из аргумента: /today 16.08)
+  /weekend — квизы на ближайшие выходные (Сб-Вс)
+  /days3   — квизы на 3 дня вперёд (сегодня + 2 дня)
+  /week    — квизы на ближайшие 7 дней
+  /start   — краткая помощь
+
+Все даты считаются по времени Казахстана (Asia/Almaty, UTC+5), а не по
+времени сервера — это важно, т.к. Render крутит контейнеры в UTC, и
+без явного учёта пояса "сегодня" переключалось бы на 5 часов позже
+реального местного времени.
 
 Работает как webhook (лёгкий Flask-сервис) — подходит для бесплатного
 тарифа Render/аналогов, т.к. никакого браузера/Chromium тут не нужно.
@@ -23,6 +30,7 @@
 import datetime as dt
 import os
 import time
+from zoneinfo import ZoneInfo
 
 import requests
 from flask import Flask, request
@@ -31,12 +39,16 @@ BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 SCHEDULE_JSON_URL = os.environ["SCHEDULE_JSON_URL"]
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+ALMATY_TZ = ZoneInfo("Asia/Almaty")  # UTC+5, без перехода на летнее время
+
 WEEKDAYS_RU = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
 app = Flask(__name__)
 
 BOT_COMMANDS = [
     {"command": "today", "description": "Квизы на сегодня (или /today 16.08 — на дату)"},
+    {"command": "weekend", "description": "Квизы на ближайшие выходные (Сб-Вс)"},
+    {"command": "days3", "description": "Квизы на 3 дня вперёд"},
     {"command": "week", "description": "Квизы на ближайшие 7 дней"},
     {"command": "help", "description": "Что умеет бот"},
 ]
@@ -58,6 +70,11 @@ def register_commands() -> None:
 
 
 register_commands()
+
+
+def today_almaty() -> dt.date:
+    """"Сегодня" по времени Казахстана, а не по времени сервера."""
+    return dt.datetime.now(ALMATY_TZ).date()
 
 
 def fetch_schedule() -> dict:
@@ -117,9 +134,27 @@ def format_day(events: list[dict], day: dt.date) -> str:
     return header + "\n\n" + "\n\n".join(entries)
 
 
-def format_week(events: list[dict], start: dt.date) -> str:
-    blocks = [format_day(events, start + dt.timedelta(days=i)) for i in range(7)]
+def format_days(events: list[dict], start: dt.date, n: int) -> str:
+    blocks = [format_day(events, start + dt.timedelta(days=i)) for i in range(n)]
     return "\n\n".join(blocks)
+
+
+def format_week(events: list[dict], start: dt.date) -> str:
+    return format_days(events, start, 7)
+
+
+def upcoming_weekend(today: dt.date) -> tuple[dt.date, dt.date]:
+    """Ближайшая суббота-воскресенье. Если сегодня уже суббота — берём
+    её же (текущие выходные). Если сегодня воскресенье — эти выходные
+    уже фактически прошли, берём следующие."""
+    days_until_saturday = (5 - today.weekday()) % 7
+    saturday = today + dt.timedelta(days=days_until_saturday)
+    return saturday, saturday + dt.timedelta(days=1)
+
+
+def format_weekend(events: list[dict], today: dt.date) -> str:
+    saturday, sunday = upcoming_weekend(today)
+    return format_day(events, saturday) + "\n\n" + format_day(events, sunday)
 
 
 def send_message(chat_id: int, text: str) -> None:
@@ -132,6 +167,22 @@ def send_message(chat_id: int, text: str) -> None:
             json={"chat_id": chat_id, "text": chunk, "parse_mode": "HTML"},
             timeout=15,
         )
+
+
+def send_typing(chat_id: int) -> None:
+    """Показываем в чате индикатор "печатает..." — пока бот скачивает и
+    обрабатывает schedule.json (обычно 5-7 секунд), пользователь видит,
+    что запрос выполняется, а не что бот завис. Индикатор в Telegram
+    держится ~5 секунд сам по себе, поэтому ошибки здесь не критичны —
+    если не получилось отправить, просто промолчим."""
+    try:
+        requests.post(
+            f"{TELEGRAM_API}/sendChatAction",
+            json={"chat_id": chat_id, "action": "typing"},
+            timeout=5,
+        )
+    except requests.RequestException:
+        pass
 
 
 @app.route("/", methods=["GET"])
@@ -148,7 +199,13 @@ def webhook():
 
     chat_id = message["chat"]["id"]
     text = (message.get("text") or "").strip()
-    today = dt.date.today()
+    today = today_almaty()
+
+    # Все команды ниже дёргают fetch_schedule() (сетевой запрос,
+    # обычно 5-7 секунд) — сразу показываем "печатает...", чтобы не
+    # выглядело, будто бот завис.
+    if text.startswith(("/today", "/weekend", "/days3", "/week", "/start", "/help")):
+        send_typing(chat_id)
 
     try:
         if text.startswith("/start") or text.startswith("/help"):
@@ -166,6 +223,8 @@ def webhook():
                 f"с сайтов: {sources_line}.\n\n"
                 "Команды:\n"
                 "/today — квизы на сегодня (можно указать дату: /today 16.08)\n"
+                "/weekend — квизы на ближайшие выходные (Сб-Вс)\n"
+                "/days3 — квизы на 3 дня вперёд\n"
                 "/week — квизы на ближайшие 7 дней",
             )
         elif text.startswith("/today"):
@@ -176,11 +235,17 @@ def webhook():
                 return "ok", 200
             data = fetch_schedule()
             send_message(chat_id, format_day(data["events"], day))
+        elif text.startswith("/weekend"):
+            data = fetch_schedule()
+            send_message(chat_id, format_weekend(data["events"], today))
+        elif text.startswith("/days3"):
+            data = fetch_schedule()
+            send_message(chat_id, format_days(data["events"], today, 3))
         elif text.startswith("/week"):
             data = fetch_schedule()
             send_message(chat_id, format_week(data["events"], today))
         else:
-            send_message(chat_id, "Не поняла команду. Есть /today и /week.")
+            send_message(chat_id, "Не поняла команду. Есть /today, /weekend, /days3 и /week.")
     except requests.RequestException as e:
         send_message(chat_id, f"Не получилось получить расписание: {e}")
 
