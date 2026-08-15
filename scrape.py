@@ -93,6 +93,12 @@ SITES = [
         # "Город" -> "Караганда" перед тем, как снимать расписание
         "needs_city_click": "Караганда",
     },
+    {
+        "key": "albertparty",
+        "name": "Эйнштейн Party",
+        "url": "https://krg.albertparty.ru/schedule",
+        "engine": "unknown",
+    },
 ]
 
 
