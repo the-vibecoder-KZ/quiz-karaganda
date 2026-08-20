@@ -10,6 +10,7 @@
   /weekend — квизы на ближайшие выходные (Сб-Вс)
   /days3   — квизы на 3 дня вперёд (сегодня + 2 дня)
   /week    — квизы на ближайшие 7 дней
+  /poll    — создать опрос "куда идём" на дату (или /poll 20.08)
   /start   — краткая помощь
 
 Все даты считаются по времени Казахстана (Asia/Almaty, UTC+5), а не по
@@ -50,6 +51,7 @@ BOT_COMMANDS = [
     {"command": "weekend", "description": "Квизы на ближайшие выходные (Сб-Вс)"},
     {"command": "days3", "description": "Квизы на 3 дня вперёд"},
     {"command": "week", "description": "Квизы на ближайшие 7 дней"},
+    {"command": "poll", "description": "Опрос «куда идём» на дату (или /poll 20.08)"},
     {"command": "help", "description": "Что умеет бот"},
 ]
 
@@ -158,6 +160,52 @@ def format_weekend(events: list[dict], today: dt.date) -> str:
     return format_day(events, saturday) + "\n\n" + format_day(events, sunday)
 
 
+PASS_OPTION = "🙅 Пас, никуда не иду"
+MAX_POLL_OPTIONS = 10  # лимит Telegram; один слот всегда резервируем под PASS_OPTION
+MAX_OPTION_LEN = 100   # лимит Telegram на длину одного варианта
+
+
+def build_poll_option(e: dict) -> str:
+    """Собираем текст одного варианта опроса. У вариантов опроса в
+    Telegram нет форматирования (HTML/Markdown не работает) — только
+    обычный текст, и жёсткий лимит в 100 символов."""
+    when = dt.datetime.fromisoformat(e["when"])
+    emoji = SOURCE_EMOJI.get(e["source"], DEFAULT_EMOJI)
+    price = f", {e['price']}₸" if e.get("price") else ""
+    text = f"{when.strftime('%H:%M')} {emoji} {e['source']} — {e['title']}{price}"
+    if len(text) > MAX_OPTION_LEN:
+        text = text[:MAX_OPTION_LEN - 1] + "…"
+    return text
+
+
+def build_poll(events: list[dict], day: dt.date) -> tuple[str, list[str]] | None:
+    """Возвращает (вопрос, варианты) для опроса на конкретный день, либо
+    None, если на этот день нет ни одной игры."""
+    day_events = [e for e in events if dt.datetime.fromisoformat(e["when"]).date() == day]
+    day_events.sort(key=lambda e: e["when"])
+    if not day_events:
+        return None
+    # На вариант "Пас" всегда резервируем последний слот из 10.
+    day_events = day_events[:MAX_POLL_OPTIONS - 1]
+    options = [build_poll_option(e) for e in day_events] + [PASS_OPTION]
+    question = f"Куда идём — {WEEKDAYS_RU[day.weekday()]}, {day.strftime('%d.%m.%Y')}?"
+    return question, options
+
+
+def send_poll(chat_id: int, question: str, options: list[str]) -> None:
+    requests.post(
+        f"{TELEGRAM_API}/sendPoll",
+        json={
+            "chat_id": chat_id,
+            "question": question,
+            "options": options,
+            "is_anonymous": False,       # видно, кто за какой квиз проголосовал
+            "allows_multiple_answers": True,
+        },
+        timeout=15,
+    )
+
+
 def send_message(chat_id: int, text: str) -> None:
     # Telegram режет сообщения по 4096 символов — на всякий случай рубим на части
     max_len = 4000
@@ -219,7 +267,7 @@ def webhook():
     # Все команды ниже дёргают fetch_schedule() (сетевой запрос,
     # обычно 5-7 секунд) — сразу показываем "печатает...", чтобы не
     # выглядело, будто бот завис.
-    if cmd in ("/today", "/weekend", "/days3", "/week", "/start", "/help"):
+    if cmd in ("/today", "/weekend", "/days3", "/week", "/poll", "/start", "/help"):
         send_typing(chat_id)
 
     try:
@@ -240,7 +288,8 @@ def webhook():
                 "/today — квизы на сегодня (можно указать дату: /today 16.08)\n"
                 "/weekend — квизы на ближайшие выходные (Сб-Вс)\n"
                 "/days3 — квизы на 3 дня вперёд\n"
-                "/week — квизы на ближайшие 7 дней",
+                "/week — квизы на ближайшие 7 дней\n"
+                "/poll — опрос «куда идём» на дату (или /poll 20.08)",
             )
         elif cmd == "/today":
             day = parse_date_arg(arg or None, today)
@@ -258,13 +307,28 @@ def webhook():
         elif cmd == "/week":
             data = fetch_schedule()
             send_message(chat_id, format_week(data["events"], today))
+        elif cmd == "/poll":
+            day = parse_date_arg(arg or None, today)
+            if day is None:
+                send_message(chat_id, "Не поняла дату. Формат: /poll 20.08")
+                return "ok", 200
+            data = fetch_schedule()
+            poll = build_poll(data["events"], day)
+            if poll is None:
+                send_message(
+                    chat_id,
+                    f"На {day.strftime('%d.%m.%Y')} игр не найдено — опрос создавать не по чему.",
+                )
+            else:
+                question, options = poll
+                send_poll(chat_id, question, options)
         else:
             # В группах бот получает вообще все сообщения, не только
             # команды — отвечаем "не поняла" только если это была
             # попытка команды (начинается с "/"), иначе молча
             # игнорируем обычную переписку в чате.
             if cmd.startswith("/"):
-                send_message(chat_id, "Не поняла команду. Есть /today, /weekend, /days3 и /week.")
+                send_message(chat_id, "Не поняла команду. Есть /today, /weekend, /days3, /week и /poll.")
     except requests.RequestException as e:
         send_message(chat_id, f"Не получилось получить расписание: {e}")
 
