@@ -234,6 +234,39 @@ def send_typing(chat_id: int) -> None:
         pass
 
 
+def send_placeholder(chat_id: int) -> int | None:
+    """Сразу отправляем видимое сообщение-заглушку — на бесплатном
+    тарифе Render сервис "засыпает" при простое, и первый запрос после
+    паузы может обрабатываться дольше обычного (в это время даже
+    индикатор "печатает" может быть незаметен). Возвращает message_id
+    для последующего удаления, либо None, если отправить не удалось."""
+    try:
+        r = requests.post(
+            f"{TELEGRAM_API}/sendMessage",
+            json={"chat_id": chat_id, "text": "🔄 Обновляю информацию..."},
+            timeout=15,
+        )
+        data = r.json()
+        if data.get("ok"):
+            return data["result"]["message_id"]
+    except requests.RequestException:
+        pass
+    return None
+
+
+def delete_message(chat_id: int, message_id: int | None) -> None:
+    if message_id is None:
+        return
+    try:
+        requests.post(
+            f"{TELEGRAM_API}/deleteMessage",
+            json={"chat_id": chat_id, "message_id": message_id},
+            timeout=10,
+        )
+    except requests.RequestException:
+        pass
+
+
 @app.route("/", methods=["GET"])
 def health():
     return "OK", 200
@@ -265,10 +298,14 @@ def webhook():
     cmd, arg = split_command(text)
 
     # Все команды ниже дёргают fetch_schedule() (сетевой запрос,
-    # обычно 5-7 секунд) — сразу показываем "печатает...", чтобы не
-    # выглядело, будто бот завис.
-    if cmd in ("/today", "/weekend", "/days3", "/week", "/poll", "/start", "/help"):
+    # обычно 5-7 секунд, а после долгого простоя сервиса — дольше) —
+    # сразу показываем индикатор "печатает" и заглушку, чтобы не
+    # выглядело, будто бот завис, а в конце заглушку удаляем.
+    slow_command = cmd in ("/today", "/weekend", "/days3", "/week", "/poll", "/start", "/help")
+    placeholder_id = None
+    if slow_command:
         send_typing(chat_id)
+        placeholder_id = send_placeholder(chat_id)
 
     try:
         if cmd in ("/start", "/help"):
@@ -331,6 +368,8 @@ def webhook():
                 send_message(chat_id, "Не поняла команду. Есть /today, /weekend, /days3, /week и /poll.")
     except requests.RequestException as e:
         send_message(chat_id, f"Не получилось получить расписание: {e}")
+    finally:
+        delete_message(chat_id, placeholder_id)
 
     return "ok", 200
 
