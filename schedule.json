@@ -1,13 +1,6 @@
 {
-  "generated_at": "2026-09-20T15:43:24.258558",
+  "generated_at": "2026-09-20T20:32:38.488518",
   "events": [
-    {
-      "source": "Chill Quiz",
-      "when": "2026-09-20T19:30:00",
-      "title": "Великолепный век",
-      "price": 3500,
-      "place": "Alpha Restobar"
-    },
     {
       "source": "Шейкер Квиз",
       "when": "2026-09-21T19:30:00",
