@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-08T23:06:50.013790",
+  "generated_at": "2026-10-09T05:17:56.103115",
   "events": [
     {
       "source": "Мохито Квиз",
@@ -16,6 +16,13 @@
       "place": "Moment cafe lounge (ул. Ермекова, 56)"
     },
     {
+      "source": "Chill Quiz",
+      "when": "2026-10-09T20:00:00",
+      "title": "Угадай мелодию: Припев edition",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
       "source": "Смузи Квиз",
       "when": "2026-10-10T16:00:00",
       "title": "Караоке-квиз: РУССКИЕ ХИТЫ СУПЕР-ЛАЙТ №1 (БЕЗ ОПЫТНЫХ КОМАНД)",
@@ -28,6 +35,13 @@
       "title": "ЧИСТО ПОПЕТЬ [00-Е]",
       "price": 3000,
       "place": "Harat's irish pub, Нуркен Абдирова 19"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-10T18:30:00",
+      "title": "УГАДАЙ МЕЛОДИЮ: ЗУМЕРСКОЕ",
+      "price": 3500,
+      "place": "chilli grill"
     },
     {
       "source": "Шейкер Квиз",
@@ -49,6 +63,27 @@
       "title": "Обо всём: ЛОТО №3",
       "price": 3000,
       "place": "ПАБ «FRAGMENT» (Университетская улица, ст-е 28/11)"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-11T18:00:00",
+      "title": "Угадай Кино (Популярные)",
+      "price": 3500,
+      "place": "Imbeer"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-11T18:30:00",
+      "title": "Классика детства: Jetix, Disney Nickelodeon, Cartoon Network",
+      "price": 3500,
+      "place": "Munchen pub"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-11T18:30:00",
+      "title": "ИНТЕРНЕТ И МЕМЫ",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
     },
     {
       "source": "Вау Квиз",
@@ -86,6 +121,13 @@
       "place": "MODE, Толепова 3/12"
     },
     {
+      "source": "Chill Quiz",
+      "when": "2026-10-13T20:00:00",
+      "title": "КЛАССИЧЕСКИЙ КВИЗ: ШКОЛЬНЫЕ ВОПРОСЫ",
+      "price": 3500,
+      "place": "chilli grill"
+    },
+    {
       "source": "Мохито Квиз",
       "when": "2026-10-14T19:30:00",
       "title": "Угадай мелодию: Музыка 2000х №6",
@@ -102,9 +144,30 @@
     {
       "source": "Chill Quiz",
       "when": "2026-10-14T19:30:00",
+      "title": "К.М.С. - Кино, Мультфильмы, Сериалы",
+      "price": 3500,
+      "place": "Munchen pub"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-14T19:30:00",
       "title": "Дневники вампира",
       "price": 3500,
       "place": "Alpha Restobar"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-14T19:30:00",
+      "title": "Пошлый квиз 18+",
+      "price": 3500,
+      "place": "Chechil Oskemen"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-14T20:00:00",
+      "title": "ПОШЛЫЙ КВИЗ 18+",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
     },
     {
       "source": "Шейкер Квиз",
@@ -128,11 +191,46 @@
       "place": "ПАБ «FRAGMENT» (Университетская улица, ст-е 28/11)"
     },
     {
+      "source": "Chill Quiz",
+      "when": "2026-10-15T19:30:00",
+      "title": "Киномания",
+      "price": 3500,
+      "place": "Munchen pub"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-15T19:30:00",
+      "title": "Угадай дораму",
+      "price": 3500,
+      "place": "Chechil Oskemen"
+    },
+    {
       "source": "Эйнштейн Party",
       "when": "2026-10-15T19:30:00",
       "title": "Музлото №1 [Русское Караоке]",
       "price": 3000,
       "place": "The \"Банка\" Bar Ул. Саттара Ерубаева, 48"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-15T20:00:00",
+      "title": "Сверхъестественное (1 - 11 сезон)",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-15T20:00:00",
+      "title": "ИГРА ПРЕСТОЛОВ",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-16T20:00:00",
+      "title": "Угадай мелодию: Зарубежная музыка",
+      "price": 3500,
+      "place": "Harat's Republic"
     },
     {
       "source": "Смузи Квиз",
@@ -147,6 +245,13 @@
       "title": "МУЗЫКАЛЬНОЕ ЛОТО [РУССКОЕ]",
       "price": 3000,
       "place": "Harat's irish pub, Нуркен Абдирова 19"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-17T18:30:00",
+      "title": "УГАДАЙ МЕЛОДИЮ: 100 ХИТОВ",
+      "price": 3500,
+      "place": "chilli grill"
     },
     {
       "source": "Chill Quiz",
@@ -175,6 +280,34 @@
       "title": "Угадай мультфильм №6",
       "price": 3000,
       "place": "ПАБ «FRAGMENT» (Университетская улица, ст-е 28/11)"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-18T18:00:00",
+      "title": "Гарри Поттер (Большая игра)",
+      "price": 3500,
+      "place": "Imbeer"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-18T18:30:00",
+      "title": "Видеоигры",
+      "price": 3500,
+      "place": "Munchen pub"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-18T18:30:00",
+      "title": "K-pop квиз",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-18T18:30:00",
+      "title": "КВИЗ: УГАДАЙ АНИМЕ",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
     },
     {
       "source": "Вау Квиз",
@@ -219,6 +352,13 @@
       "place": "ПАБ «FRAGMENT» (Университетская улица, ст-е 28/11)"
     },
     {
+      "source": "Chill Quiz",
+      "when": "2026-10-20T20:00:00",
+      "title": "КВИЗ: ВИДЕОИГРЫ",
+      "price": 3500,
+      "place": "chilli grill"
+    },
+    {
       "source": "Мохито Квиз",
       "when": "2026-10-21T19:30:00",
       "title": "Угадай мелодию: Эпохи №1",
@@ -238,6 +378,34 @@
       "title": "K-pop",
       "price": 3500,
       "place": "Alpha Restobar"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-21T19:30:00",
+      "title": "Игра Престолов, Дом Дракона, Рыцарь Семи Королевств",
+      "price": 3500,
+      "place": "Chechil Oskemen"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-21T20:00:00",
+      "title": "Дневники вампира",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-21T20:00:00",
+      "title": "Угадай аниме",
+      "price": 3500,
+      "place": "Harat's na Pastera"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-21T20:00:00",
+      "title": "КЛАССИКА ДЕТСТВА: CARTOON NETWORK, NICKELODEON",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
     },
     {
       "source": "Шейкер Квиз",
@@ -268,6 +436,34 @@
       "place": "Alpha Restobar"
     },
     {
+      "source": "Chill Quiz",
+      "when": "2026-10-22T19:30:00",
+      "title": "Угадай аниме",
+      "price": 3500,
+      "place": "Chechil Oskemen"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-22T20:00:00",
+      "title": "Назад в 2000-ые",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-22T20:00:00",
+      "title": "ДОРАМЫ",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-23T20:00:00",
+      "title": "Угадай мелодию: 100 хитов",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
       "source": "Смузи Квиз",
       "when": "2026-10-24T16:00:00",
       "title": "Угадай мелодию: РУССКИЕ ХИТЫ 2000-х и 2010-х №7",
@@ -280,6 +476,13 @@
       "title": "МУЗЫКАЛЬНОЕ ЛОТО [ЛАЙТ]",
       "price": 3000,
       "place": "Harat's irish pub, Нуркен Абдирова 19"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-24T17:00:00",
+      "title": "УГАДАЙ МЕЛОДИЮ: ROCK",
+      "price": 3500,
+      "place": "Garage Music Bar"
     },
     {
       "source": "Шейкер Квиз",
@@ -304,6 +507,20 @@
     },
     {
       "source": "Chill Quiz",
+      "when": "2026-10-25T18:30:00",
+      "title": "Мультфильмы (полнометражные)",
+      "price": 3500,
+      "place": "Munchen pub"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-25T18:30:00",
+      "title": "Американская история ужасов (1–5 сезон)",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
+      "source": "Chill Quiz",
       "when": "2026-10-25T19:30:00",
       "title": "Cериал “Кухня”",
       "price": 3500,
@@ -322,6 +539,13 @@
       "title": "Угадай аниме ЛАЙТ №1",
       "price": 3000,
       "place": "ПАБ «FRAGMENT» (Университетская улица, ст-е 28/11)"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-27T20:00:00",
+      "title": "УГАДАЙ КИНО",
+      "price": 3500,
+      "place": "chilli grill"
     },
     {
       "source": "Мохито Квиз",
@@ -345,6 +569,27 @@
       "place": "Alpha Restobar"
     },
     {
+      "source": "Chill Quiz",
+      "when": "2026-10-28T19:30:00",
+      "title": "Интернет и Мемы",
+      "price": 3500,
+      "place": "Chechil Oskemen"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-28T20:00:00",
+      "title": "Аниме музыка",
+      "price": 3500,
+      "place": "Harat's na Pastera"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-28T20:00:00",
+      "title": "АМЕРИКАНСКАЯ ИСТОРИЯ УЖАСОВ",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
+    },
+    {
       "source": "Шейкер Квиз",
       "when": "2026-10-29T19:30:00",
       "title": "#ОБОВСЁМ",
@@ -366,6 +611,34 @@
       "place": "ПАБ «FRAGMENT» (Университетская улица, ст-е 28/11)"
     },
     {
+      "source": "Chill Quiz",
+      "when": "2026-10-29T19:30:00",
+      "title": "Мультимикс: Halloween edition",
+      "price": 3500,
+      "place": "Munchen pub"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-29T19:30:00",
+      "title": "Отчаянные домохозяйки",
+      "price": 3500,
+      "place": "Chechil Oskemen"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-29T20:00:00",
+      "title": "ВЕЛИКОЛЕПНЫЙ ВЕК",
+      "price": 3500,
+      "place": "Harat's Желтоксан"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-30T20:00:00",
+      "title": "Угадай мелодию: Музыкальный микс",
+      "price": 3500,
+      "place": "Harat's Republic"
+    },
+    {
       "source": "Смузи Квиз",
       "when": "2026-10-31T16:00:00",
       "title": "Угадай мелодию: РУССКИЕ ХИТЫ 90-х и 2000-х СУПЕР-ЛАЙТ №4 (БЕЗ ОПЫТНЫХ КОМАНД)",
@@ -378,6 +651,13 @@
       "title": "ЧИСТО ПОПЕТЬ",
       "price": 3000,
       "place": "Harat's irish pub, Нуркен Абдирова 19"
+    },
+    {
+      "source": "Chill Quiz",
+      "when": "2026-10-31T18:30:00",
+      "title": "К.М.С. — ХЭЛЛОУИН 🎃 конкурс костюмов - приз 50К",
+      "price": 3500,
+      "place": "chilli grill"
     },
     {
       "source": "Chill Quiz",
