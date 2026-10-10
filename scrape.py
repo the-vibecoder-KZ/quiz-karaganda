@@ -7,7 +7,7 @@
 - Шейкер Квиз   (karaganda.shakerquiz.ru) — Next.js SPA
 - Мохито Квиз   (krg.mohito-quiz.com)     — Tilda
 - Смузи Квиз    (krg.smuzi-quiz.com)      — неизвестная платформа
-- Chill Quiz    (chillquiz.kz)            — Next.js SPA, выбор города кликом
+- Chill Quiz    (chillquiz.kz)            — Next.js, игры всех городов в данных, фильтруем по городу
 - Вау Квиз      (krg.wowquiz.ru)          — Nuxt SPA
 - Эйнштейн Party (krg.albertparty.ru)     — сервер-рендер
 
@@ -92,9 +92,9 @@ SITES = [
         "name": "Chill Quiz",
         "url": "https://chillquiz.kz/quizzes",
         "engine": "next",
-        # по умолчанию сайт показывает другой город — нужно кликнуть
-        # "Город" -> "Караганда" перед тем, как снимать расписание
-        "needs_city_click": "Караганда",
+        # В странице лежат игры ВСЕХ городов сразу; город выбирается
+        # только фильтром в браузере. Поэтому не кликаем по интерфейсу,
+        # а фильтруем по данным — см. parse_chillquiz_html().
     },
     {
         "key": "albertparty",
@@ -473,55 +473,129 @@ def parse_quizplease_text(text: str, today: dt.date | None = None) -> list[dict]
     return events
 
 
-def parse_chillquiz_text(text: str) -> list[dict]:
-    """Парсер для Chill Quiz. Список сразу весь на странице (без
-    пагинации), но сайт зависит от выбранного в интерфейсе города —
-    выбор "Караганда" делается кликом в render_with_playwright()
-    (см. site["needs_city_click"]). Формат одной карточки:
-        Открыта регистрация
-        Человек-паук
-        14 августа 2026 г.
-        20:00
-        Garage Music Bar
-        Кино
-        49/120 мест занято
-        71 свободно
-        3500 ₸
-        за человека
-        Подробнее и регистрация
-        →
-    Время иногда пишется без минут (просто "18" вместо "18:00")."""
-    lines = [l.strip() for l in text.splitlines() if l.strip()]
-    date_re = re.compile(r'^(\d{1,2}) ([а-яё]+) (\d{4}) г\.$')
-    price_re = re.compile(r'^([\d\s]+)\s*₸$')
+CHILLQUIZ_CITY = "Караганда"
+
+
+def _nextjs_flight_rows(html: str) -> dict:
+    """Достаём из HTML страницы на Next.js (app router) «flight»-данные —
+    поток сериализованных объектов, который сервер кладёт в inline-скрипты
+    `self.__next_f.push([1, "..."])`. Возвращает {id_ряда: распарсенный JSON}."""
+    decoder = json.JSONDecoder()
+    chunks = []
+    for m in re.finditer(r"self\.__next_f\.push\(", html):
+        try:
+            arr, _ = decoder.raw_decode(html[m.end():])
+        except ValueError:
+            continue
+        if isinstance(arr, list) and len(arr) >= 2 and arr[0] == 1 and isinstance(arr[1], str):
+            chunks.append(arr[1])
+    rows = {}
+    for line in "".join(chunks).split("\n"):
+        m = re.match(r"^([0-9a-f]+):(.*)$", line, re.S)
+        if m and m.group(2)[:1] in '[{"':
+            try:
+                rows[m.group(1)] = json.loads(m.group(2))
+            except ValueError:
+                pass
+    return rows
+
+
+_FLIGHT_REF = re.compile(r"^\$([0-9a-f]+)((?::[^:]+)*)$")
+
+
+def _resolve_flight_ref(value, rows: dict):
+    """В flight-данных повторяющиеся объекты не дублируются, а заменяются
+    ссылками вида "$5:1:props:children:props:initialQuizzes:0:location:city".
+    Идём по такой ссылке до настоящего объекта. Сегмент "props" у
+    React-элемента ["$", тип, ключ, props] означает индекс 3."""
+    for _ in range(12):  # защита от циклов
+        if not (isinstance(value, str) and _FLIGHT_REF.match(value)):
+            return value
+        m = _FLIGHT_REF.match(value)
+        try:
+            obj = rows[m.group(1)]
+            for seg in [s for s in m.group(2).split(":") if s]:
+                if isinstance(obj, list):
+                    obj = obj[3] if seg == "props" else obj[int(seg)]
+                else:
+                    obj = obj[seg]
+        except (KeyError, IndexError, ValueError, TypeError):
+            return value
+        value = obj
+    return value
+
+
+def _find_key(obj, key):
+    """Ищем значение по ключу в произвольно вложенной структуре."""
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        for v in obj.values():
+            found = _find_key(v, key)
+            if found is not None:
+                return found
+    elif isinstance(obj, list):
+        for v in obj:
+            found = _find_key(v, key)
+            if found is not None:
+                return found
+    return None
+
+
+def parse_chillquiz_html(html: str, city: str = CHILLQUIZ_CITY) -> list[dict]:
+    """Парсер для Chill Quiz (chillquiz.kz) — по данным, а не по тексту.
+
+    Сайт отдаёт в одной странице игры ВСЕХ городов (Алматы, Астана,
+    Караганда, Усть-Каменогорск) сразу, а выбор города в интерфейсе лишь
+    фильтрует их в браузере. Поэтому кликать по диалогу выбора города не
+    нужно (это было ненадёжно) — берём полный список из встроенных данных
+    Next.js и сами оставляем только игры нужного города.
+
+    У игры есть поля: title, quizDate (дата, время суток там условное —
+    12:00Z), quizTime ("19:30" или просто "18"), pricePerPerson,
+    eventStatus ("upcoming"), location {name, address, city}."""
+    rows = _nextjs_flight_rows(html)
+    quizzes = None
+    for row in rows.values():
+        quizzes = _find_key(row, "initialQuizzes")
+        if quizzes:
+            break
+    if not quizzes:
+        return []
+
     events = []
-    n = len(lines)
-    for i, l in enumerate(lines):
-        m = date_re.match(l)
-        if not m:
+    for q in quizzes:
+        q = _resolve_flight_ref(q, rows)
+        if not isinstance(q, dict):
             continue
-        day, month_name, year = m.groups()
-        month = MONTHS_RU.get(month_name.lower())
-        if not month or i < 1 or i + 2 >= n:
+        loc = _resolve_flight_ref(q.get("location"), rows)
+        if not isinstance(loc, dict):
             continue
-        title = lines[i - 1]
-        time_line = lines[i + 1]
-        tm = re.match(r'^(\d{1,2})(?::(\d{2}))?$', time_line)
-        if not tm:
+        loc_city = _resolve_flight_ref(loc.get("city"), rows)
+        quiz_city = _resolve_flight_ref(q.get("city"), rows)
+        names = {c.get("name") for c in (loc_city, quiz_city) if isinstance(c, dict)}
+        if city not in names:
+            continue
+        if q.get("eventStatus") != "upcoming" or q.get("cancelledAt"):
+            continue
+
+        tm = re.match(r"^(\d{1,2})(?::(\d{2}))?$", str(q.get("quizTime", "")).strip())
+        if not tm or not q.get("quizDate"):
             continue
         hh = int(tm.group(1))
         mm = int(tm.group(2)) if tm.group(2) else 0
-        venue = lines[i + 2]
-        price = None
-        for j in range(i + 3, min(i + 8, n)):
-            pm = price_re.match(lines[j])
-            if pm:
-                price = int(pm.group(1).replace(" ", ""))
-                break
-        when = dt.datetime(int(year), month, int(day), hh, mm)
+        try:
+            day = dt.date.fromisoformat(str(q["quizDate"])[:10])
+        except ValueError:
+            continue
+
+        place = ", ".join(p for p in (loc.get("name"), loc.get("address")) if p) or None
         events.append({
-            "source": "Chill Quiz", "when": when, "title": title,
-            "price": price, "place": venue,
+            "source": "Chill Quiz",
+            "when": dt.datetime(day.year, day.month, day.day, hh, mm),
+            "title": str(q.get("title", "")).strip(),
+            "price": q.get("pricePerPerson"),
+            "place": place,
         })
     return events
 
@@ -625,19 +699,67 @@ def parse_albertparty_text(text: str, today: dt.date | None = None) -> list[dict
     return events
 
 
+# Парсеры, которые работают не с видимым текстом, а с исходным HTML страницы
+# (например, с данными, встроенными в страницу самим сайтом)
+RENDER_HTML_PARSERS = {
+    "chillquiz": parse_chillquiz_html,
+}
+
 # Парсеры, применяемые к тексту, полученному через рендер в браузере
 RENDER_TEXT_PARSERS = {
     "mohito": parse_mohito_text,
     "smuzi": parse_smuzi_text,
     "quizplease": parse_quizplease_text,
-    "chillquiz": parse_chillquiz_text,
     "wowquiz": parse_wowquiz_text,
     "albertparty": parse_albertparty_text,
 }
 
 
+async def process_html_site(site: dict, html_parser) -> list[dict]:
+    """Сайты, у которых расписание лежит в самом HTML (в данных страницы).
+    Сначала пробуем обычный HTTP-запрос — он быстрее и не требует браузера;
+    если игр там не нашлось (например, сайт отдаёт другую версию страницы
+    без браузера) — рендерим через Playwright и парсим уже его HTML."""
+    try:
+        r = requests.get(site["url"], headers=HEADERS, timeout=30)
+        r.raise_for_status()
+        events = html_parser(r.text)
+        if events:
+            print(f"  [+] Данные получены обычным запросом, без браузера. Распарсили {len(events)} игр(ы).")
+            return events
+        print("  [i] В ответе обычного запроса игр не нашли — пробуем через браузер...")
+    except Exception as e:
+        print(f"  [i] Обычный запрос не сработал ({e}) — пробуем через браузер...")
+
+    try:
+        text, html = await render_with_playwright(site["url"])
+    except ModuleNotFoundError:
+        print("  [!] Playwright не установлен. Выполните:")
+        print("        pip install playwright")
+        print("        playwright install chromium")
+        return []
+    except Exception as e:
+        print(f"  [!] Не получилось отрендерить страницу: {e}")
+        return []
+
+    # Сохраняем для разбора, если что-то пойдёт не так
+    (DEBUG_DIR / f"{site['key']}_rendered.txt").write_text(text, encoding="utf-8")
+    (DEBUG_DIR / f"{site['key']}_rendered.html").write_text(html, encoding="utf-8")
+    try:
+        events = html_parser(html)
+    except Exception as e:
+        print(f"  [!] Не смогли распарсить HTML: {e}")
+        return []
+    print(f"  [+] Распарсили {len(events)} игр(ы) через браузер.")
+    return events
+
+
 async def process_site(site: dict) -> list[dict]:
     print(f"\n=== {site['name']} ({site['url']}) ===")
+
+    html_parser = RENDER_HTML_PARSERS.get(site["key"])
+    if html_parser:
+        return await process_html_site(site, html_parser)
 
     # Сайты, где список игр зависит от выбранного в интерфейсе города
     # (а не от URL) — встроенный JSON пропускаем, он покажет не тот
