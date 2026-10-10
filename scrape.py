@@ -383,7 +383,7 @@ def parse_smuzi_text(text: str, today: dt.date | None = None) -> list[dict]:
 WEEKDAYS_FULL = {"Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"}
 
 
-def parse_quizplease_text(text: str, today: dt.date | None = None) -> list[dict]:
+def _parse_quizplease_old_format(text: str, today: dt.date | None = None) -> list[dict]:
     """Парсер для Квиз, плиз!. Страница расписания сразу показывает ВСЕ
     игры, на которые открыта регистрация (их может быть одна, а может
     быть и несколько — зависит от того, сколько уже опубликовано
@@ -697,6 +697,79 @@ def parse_albertparty_text(text: str, today: dt.date | None = None) -> list[dict
             "price": price, "place": venue_line.title(),
         })
     return events
+
+
+def _parse_quizplease_new_format(text: str, today: dt.date | None = None) -> list[dict]:
+    """Актуальная вёрстка Квиз, плиз! (с осени 2026). Расписание — лента
+    карточек, сгруппированных по датам. Внутри карточки:
+        Квиз, плиз! KRG #321                   <- название
+        Не знаете, какую игру выбрать? ...      <- описание (1+ строк)
+        Banka bar                               <- заведение
+        Ерубаева 48                             <- адрес
+        14 октября, 19:30 (Среда)               <- дата, время, день недели
+        3000₸ с человека
+        Записаться
+        Подробнее
+    Отталкиваемся от строки с датой и временем — она самая узнаваемая;
+    заведение и адрес стоят прямо перед ней, название ищем выше по тексту
+    (в нём есть "KRG #<номер>")."""
+    today = today or dt.date.today()
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    date_re = re.compile(r"^(\d{1,2}) ([а-яё]+), (\d{1,2}):(\d{2}) \(([^)]+)\)$", re.I)
+    price_re = re.compile(r"^([\d\s\xa0]+)\s*₸")
+    title_res = [re.compile(r"KRG\s*#\s*\d+", re.I), re.compile(r"#\s*\d+")]
+
+    events = []
+    n = len(lines)
+    for i, l in enumerate(lines):
+        m = date_re.match(l)
+        if not m or i < 4:
+            continue
+        day, month_name, hh, mm, _wd = m.groups()
+        month = MONTHS_RU.get(month_name.lower())
+        if not month:
+            continue
+
+        address, venue = lines[i - 1], lines[i - 2]
+        title_search_end = i - 2  # строки до заведения
+        # Если заведение и адрес склеены в одну строку, то "venue" на
+        # самом деле — хвост описания: берём одну строку как место.
+        if len(venue) > 60:
+            venue, address = "", lines[i - 1]
+            title_search_end = i - 1
+
+        title = None
+        for rx in title_res:
+            for j in range(title_search_end - 1, max(title_search_end - 10, -1), -1):
+                if rx.search(lines[j]):
+                    title = lines[j]
+                    break
+            if title:
+                break
+        if title is None:
+            title = lines[max(title_search_end - 2, 0)]
+
+        price = None
+        for j in range(i + 1, min(i + 4, n)):
+            pm = price_re.match(lines[j])
+            if pm:
+                price = int(re.sub(r"[\s\xa0]", "", pm.group(1)))
+                break
+
+        year = _resolve_year(month, int(day), today)
+        when = dt.datetime(year, month, int(day), int(hh), int(mm))
+        place = ", ".join(p for p in (venue, address) if p) or None
+        events.append({
+            "source": "Квиз, плиз!", "when": when, "title": title,
+            "price": price, "place": place,
+        })
+    return events
+
+
+def parse_quizplease_text(text: str, today: dt.date | None = None) -> list[dict]:
+    """Квиз, плиз!: сначала пробуем актуальную вёрстку, если игр не
+    нашлось — прежнюю (на случай, если сайт вернёт старый вид)."""
+    return _parse_quizplease_new_format(text, today) or _parse_quizplease_old_format(text, today)
 
 
 # Парсеры, которые работают не с видимым текстом, а с исходным HTML страницы
