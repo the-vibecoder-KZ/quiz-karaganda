@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-09T22:26:57.615611",
+  "generated_at": "2026-10-10T05:02:37.060136",
   "events": [
     {
       "source": "Смузи Квиз",
@@ -90,7 +90,7 @@
       "when": "2026-10-14T19:30:00",
       "title": "Дневники вампира",
       "price": 3500,
-      "place": "Alpha Restobar"
+      "place": "AYU bar"
     },
     {
       "source": "Шейкер Квиз",
@@ -174,7 +174,7 @@
       "when": "2026-10-18T19:30:00",
       "title": "Сверхъестественное (1-9 сезон)",
       "price": 3500,
-      "place": "Alpha Restobar"
+      "place": "AYU bar"
     },
     {
       "source": "Шейкер Квиз",
@@ -223,7 +223,7 @@
       "when": "2026-10-21T19:30:00",
       "title": "K-pop",
       "price": 3500,
-      "place": "Alpha Restobar"
+      "place": "AYU bar"
     },
     {
       "source": "Шейкер Квиз",
@@ -251,7 +251,7 @@
       "when": "2026-10-22T19:30:00",
       "title": "Аниме квиз (лайт)",
       "price": 3500,
-      "place": "Alpha Restobar"
+      "place": "AYU bar"
     },
     {
       "source": "Смузи Квиз",
@@ -293,7 +293,7 @@
       "when": "2026-10-25T19:30:00",
       "title": "Cериал “Кухня”",
       "price": 3500,
-      "place": "Alpha Restobar"
+      "place": "AYU bar"
     },
     {
       "source": "Эйнштейн Party",
@@ -335,7 +335,7 @@
       "when": "2026-10-28T19:30:00",
       "title": "Угадай мелодию: Припев Edition",
       "price": 3500,
-      "place": "Alpha Restobar"
+      "place": "AYU bar"
     },
     {
       "source": "Шейкер Квиз",
@@ -374,7 +374,7 @@
     },
     {
       "source": "Chill Quiz",
-      "when": "2026-10-31T19:30:00",
+      "when": "2026-10-31T17:00:00",
       "title": "К.М.С.: КИНО, МУЛЬТФИЛЬМЫ, СЕРИАЛЫ — ХЭЛЛОУИН",
       "price": 3500,
       "place": "Avanti"
