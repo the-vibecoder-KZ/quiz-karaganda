@@ -10,6 +10,7 @@
 - Chill Quiz    (chillquiz.kz)            — Next.js, игры всех городов в данных, фильтруем по городу
 - Вау Квиз      (krg.wowquiz.ru)          — Nuxt SPA
 - Эйнштейн Party (krg.albertparty.ru)     — сервер-рендер
+- MozgoQuiz     (krg.mzgb.net)            — список игр строится в браузере
 
 Стратегия для каждого сайта:
   1) Быстрый путь: скачать голый HTML и поискать встроенный JSON-стейт
@@ -101,6 +102,15 @@ SITES = [
         "name": "Эйнштейн Party",
         "url": "https://krg.albertparty.ru/schedule",
         "engine": "unknown",
+    },
+    {
+        "key": "mzgb",
+        "name": "MozgoQuiz",
+        "url": "https://krg.mzgb.net/",
+        "engine": "unknown",
+        # список игр строится в браузере (на странице шаблоны вида
+        # {{ upcomingGames }}), поэтому нужен рендер через Playwright
+        "skip_embedded_json": True,
     },
 ]
 
