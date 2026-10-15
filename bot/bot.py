@@ -114,7 +114,8 @@ SOURCE_EMOJI = {
     "Смузи Квиз": "🥤",
     "Chill Quiz": "❄️",
     "Вау Квиз": "🎉",
-    "Эйнштейн Party": "🧠",
+    "Эйнштейн Party": "💡",
+    "MozgoQuiz": "🧠",
 }
 DEFAULT_EMOJI = "🎯"
 
