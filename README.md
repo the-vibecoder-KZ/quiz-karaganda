@@ -8,6 +8,8 @@
 - Смузи Квиз — https://krg.smuzi-quiz.com/games
 - Chill Quiz — https://chillquiz.kz/quizzes
 - Вау Квиз — https://krg.wowquiz.ru/schedule
+- Эйнштейн Party — https://krg.albertparty.ru/schedule
+- MozgoQuiz — https://krg.mzgb.net/
 
 ## Почему нельзя просто спарсить requests + BeautifulSoup
 
