@@ -782,6 +782,66 @@ def parse_quizplease_text(text: str, today: dt.date | None = None) -> list[dict]
     return _parse_quizplease_new_format(text, today) or _parse_quizplease_old_format(text, today)
 
 
+def parse_mzgb_text(text: str, today: dt.date | None = None) -> list[dict]:
+    """Парсер для MozgoQuiz (krg.mzgb.net). Список строится в браузере и
+    сразу весь лежит на главной странице в блоке "Ближайшие игры".
+    Формат одной карточки:
+        ПОСЛЕЗАВТРА                    <- сколько осталось (может не быть)
+        ТЕМАТИКА                       <- тип игры (может не быть)
+        18+                            <- название
+        17 октября, сб, 17:00          <- дата, день недели, время
+        Бочонок                        <- заведение
+        Чкалова, 6а                    <- адрес
+        3000 KZT
+        Регистрация уже идёт
+        ЗАРЕГИСТРИРОВАТЬСЯ
+    Название у тематических игр короткое ("18+"), поэтому добавляем к
+    нему тип игры: "Тематика: 18+"."""
+    today = today or dt.date.today()
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    date_re = re.compile(
+        r"^(\d{1,2}) ([а-яё]+), (?:пн|вт|ср|чт|пт|сб|вс), (\d{1,2}):(\d{2})$", re.I
+    )
+    relative_re = re.compile(r"^(СЕГОДНЯ|ЗАВТРА|ПОСЛЕЗАВТРА|ЧЕРЕЗ\b.*)$", re.I)
+    price_re = re.compile(r"^([\d\s\xa0]+)\s*(?:KZT|₸|тг|тенге)", re.I)
+
+    events = []
+    n = len(lines)
+    for i, l in enumerate(lines):
+        m = date_re.match(l)
+        if not m or i < 1 or i + 2 >= n:
+            continue
+        day, month_name, hh, mm = m.groups()
+        month = MONTHS_RU.get(month_name.lower())
+        if not month:
+            continue
+
+        title = lines[i - 1]
+        # строка перед названием — тип игры ("ТЕМАТИКА", "КЛАССИКА"...),
+        # но только если это не надпись "ПОСЛЕЗАВТРА"/"ЗАВТРА" и т.п.
+        kind = lines[i - 2] if i >= 2 else ""
+        if kind and (relative_re.match(kind) or not kind.isupper() or len(kind) > 30):
+            kind = ""
+        if kind:
+            title = f"{kind.capitalize()}: {title}"
+
+        venue, address = lines[i + 1], lines[i + 2]
+        price = None
+        for j in range(i + 3, min(i + 6, n)):
+            pm = price_re.match(lines[j])
+            if pm:
+                price = int(re.sub(r"[\s\xa0]", "", pm.group(1)))
+                break
+
+        year = _resolve_year(month, int(day), today)
+        when = dt.datetime(year, month, int(day), int(hh), int(mm))
+        events.append({
+            "source": "MozgoQuiz", "when": when, "title": title,
+            "price": price, "place": f"{venue}, {address}",
+        })
+    return events
+
+
 # Парсеры, которые работают не с видимым текстом, а с исходным HTML страницы
 # (например, с данными, встроенными в страницу самим сайтом)
 RENDER_HTML_PARSERS = {
@@ -795,6 +855,7 @@ RENDER_TEXT_PARSERS = {
     "quizplease": parse_quizplease_text,
     "wowquiz": parse_wowquiz_text,
     "albertparty": parse_albertparty_text,
+    "mzgb": parse_mzgb_text,
 }
 
 
