@@ -266,6 +266,17 @@ SITE_PARSERS = {
 }
 
 
+def _today_almaty() -> dt.date:
+    """Сегодняшняя дата по Казахстану (UTC+5). Сервер GitHub Actions живёт
+    в UTC, и вечером по местному времени его "сегодня" ещё вчерашнее."""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Asia/Almaty")
+    except Exception:
+        tz = dt.timezone(dt.timedelta(hours=5))
+    return dt.datetime.now(tz).date()
+
+
 def _resolve_year(month: int, day: int, today: dt.date) -> int:
     """Сайты не пишут год в расписании. Берём текущий год; если дата уже
     в прошлом (например, декабрь при просмотре в январе) — значит, речь
@@ -711,7 +722,8 @@ def parse_albertparty_text(text: str, today: dt.date | None = None) -> list[dict
 
 def _parse_quizplease_new_format(text: str, today: dt.date | None = None) -> list[dict]:
     """Актуальная вёрстка Квиз, плиз! (с осени 2026). Расписание — лента
-    карточек, сгруппированных по датам. Внутри карточки:
+    карточек, сгруппированных по датам. Над карточками дня стоит заголовок
+    группы ("14 октября" и под ним "Среда, 14 октября"). Внутри карточки:
         Квиз, плиз! KRG #321                   <- название
         Не знаете, какую игру выбрать? ...      <- описание (1+ строк)
         Banka bar                               <- заведение
@@ -720,25 +732,50 @@ def _parse_quizplease_new_format(text: str, today: dt.date | None = None) -> lis
         3000₸ с человека
         Записаться
         Подробнее
-    Отталкиваемся от строки с датой и временем — она самая узнаваемая;
-    заведение и адрес стоят прямо перед ней, название ищем выше по тексту
-    (в нём есть "KRG #<номер>")."""
-    today = today or dt.date.today()
+    Для ближайших дней сайт вместо даты пишет слово: "Сегодня, 19:30",
+    "Завтра, 19:30". Тогда дату берём из заголовка группы ("Среда,
+    21 октября") — это точнее, чем считать от часов сервера, которые
+    могут жить в другом часовом поясе.
+    Отталкиваемся от строки со временем: заведение и адрес стоят прямо
+    перед ней, название ищем выше по тексту (в нём есть "KRG #<номер>")."""
+    today = today or _today_almaty()
     lines = [l.strip() for l in text.splitlines() if l.strip()]
-    date_re = re.compile(r"^(\d{1,2}) ([а-яё]+), (\d{1,2}):(\d{2}) \(([^)]+)\)$", re.I)
+    weekdays = "понедельник|вторник|среда|четверг|пятница|суббота|воскресенье"
+    absolute_re = re.compile(r"^(\d{1,2}) ([а-яё]+), (\d{1,2}):(\d{2}) \(([^)]+)\)$", re.I)
+    relative_re = re.compile(r"^(сегодня|завтра|послезавтра), (\d{1,2}):(\d{2})$", re.I)
+    group_re = re.compile(rf"^(?:{weekdays}), (\d{{1,2}}) ([а-яё]+)$", re.I)
     price_re = re.compile(r"^([\d\s\xa0]+)\s*₸")
     title_res = [re.compile(r"KRG\s*#\s*\d+", re.I), re.compile(r"#\s*\d+")]
+    offsets = {"сегодня": 0, "завтра": 1, "послезавтра": 2}
 
     events = []
     n = len(lines)
+    group_date = None  # дата последнего встреченного заголовка группы
     for i, l in enumerate(lines):
-        m = date_re.match(l)
-        if not m or i < 4:
+        gm = group_re.match(l)
+        if gm:
+            g_month = MONTHS_RU.get(gm.group(2).lower())
+            if g_month:
+                g_day = int(gm.group(1))
+                group_date = dt.date(_resolve_year(g_month, g_day, today), g_month, g_day)
             continue
-        day, month_name, hh, mm, _wd = m.groups()
-        month = MONTHS_RU.get(month_name.lower())
-        if not month:
+
+        am = absolute_re.match(l)
+        rm = None if am else relative_re.match(l)
+        if not (am or rm) or i < 4:
             continue
+
+        if am:
+            day, month_name, hh, mm, _wd = am.groups()
+            month = MONTHS_RU.get(month_name.lower())
+            if not month:
+                continue
+            game_date = dt.date(_resolve_year(month, int(day), today), month, int(day))
+        else:
+            word, hh, mm = rm.groups()
+            # абсолютная дата из заголовка группы надёжнее, чем "сегодня"
+            # по часам сервера; если заголовка нет — считаем от today
+            game_date = group_date or (today + dt.timedelta(days=offsets[word.lower()]))
 
         address, venue = lines[i - 1], lines[i - 2]
         title_search_end = i - 2  # строки до заведения
@@ -766,8 +803,7 @@ def _parse_quizplease_new_format(text: str, today: dt.date | None = None) -> lis
                 price = int(re.sub(r"[\s\xa0]", "", pm.group(1)))
                 break
 
-        year = _resolve_year(month, int(day), today)
-        when = dt.datetime(year, month, int(day), int(hh), int(mm))
+        when = dt.datetime(game_date.year, game_date.month, game_date.day, int(hh), int(mm))
         place = ", ".join(p for p in (venue, address) if p) or None
         events.append({
             "source": "Квиз, плиз!", "when": when, "title": title,
