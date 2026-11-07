@@ -10,6 +10,7 @@
 - Вау Квиз — https://krg.wowquiz.ru/schedule
 - Эйнштейн Party — https://krg.albertparty.ru/schedule
 - MozgoQuiz — https://krg.mzgb.net/
+- Peace Quiz — https://peacequizkrg.kz/raspisanie_qaragandy
 
 ## Почему нельзя просто спарсить requests + BeautifulSoup
 
