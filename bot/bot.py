@@ -116,6 +116,7 @@ SOURCE_EMOJI = {
     "Вау Квиз": "🎉",
     "Эйнштейн Party": "💡",
     "MozgoQuiz": "🧠",
+    "Peace Quiz": "☮️",
 }
 DEFAULT_EMOJI = "🎯"
 
