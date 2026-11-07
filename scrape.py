@@ -120,6 +120,9 @@ SITES = [
         "engine": "tilda",
         # Tilda: в обычном HTML списка игр нет, он появляется в браузере
         "skip_embedded_json": True,
+        # Под списком кнопка "ещё больше квизов": игры подгружаются
+        # порциями. Нажимаем её, пока не пропадёт.
+        "load_more_selector": ".js-cms-load-button",
     },
 ]
 
@@ -162,7 +165,34 @@ def try_fetch_embedded_json(url: str) -> dict | None:
     return None
 
 
-async def render_with_playwright(url: str, wait_selector: str | None = None, city_click: str | None = None):
+async def _click_load_more(page, selector: str, max_clicks: int = 15) -> int:
+    """Нажимаем кнопку «показать ещё», пока она видна и после клика на
+    странице появляется новый текст. Возвращает число успешных нажатий.
+    Ограничение max_clicks защищает от бесконечного цикла, если кнопка
+    по какой-то причине не исчезает."""
+    clicks = 0
+    for _ in range(max_clicks):
+        button = page.locator(selector).first
+        try:
+            if not await button.is_visible():
+                break
+            before = len(await page.inner_text("body"))
+            await button.click(timeout=5000)
+        except Exception:
+            break
+        await page.wait_for_timeout(1500)
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        after = len(await page.inner_text("body"))
+        if after <= before:
+            break  # клик ничего не добавил — дальше нажимать нет смысла
+        clicks += 1
+    return clicks
+
+
+async def render_with_playwright(url: str, wait_selector: str | None = None, city_click: str | None = None, load_more: str | None = None):
     """Открываем страницу настоящим headless-браузером, ждём отрисовки
     и возвращаем видимый текст body. Требует `playwright install chromium`.
 
@@ -218,6 +248,9 @@ async def render_with_playwright(url: str, wait_selector: str | None = None, cit
                 print(f"      [+] Город «{city_click}» выбран, диалог закрылся.")
             except Exception as e:
                 print(f"      [!] Не удалось выбрать город «{city_click}»: {e}")
+
+        if load_more:
+            await _click_load_more(page, load_more)
 
         # прокрутим страницу вниз — вдруг список игр подгружается лениво
         for _ in range(5):
@@ -887,6 +920,61 @@ def parse_mzgb_text(text: str, today: dt.date | None = None) -> list[dict]:
     return events
 
 
+def _sentence_case(text: str) -> str:
+    """"УГАДАЙ МЕЛОДИЮ: ROCK №1" -> "Угадай мелодию: ROCK №1". Текст на сайте
+    набран капсом; приводим русские слова к обычному виду, а слова с
+    латиницей (ROCK, K-POP) оставляем как есть."""
+    words = [w if re.search(r"[A-Za-z]", w) else w.lower() for w in text.split()]
+    result = " ".join(words)
+    for idx, ch in enumerate(result):
+        if ch.isalpha():
+            return result[:idx] + ch.upper() + result[idx + 1:]
+    return result
+
+
+def parse_peacequiz_text(text: str, today: dt.date | None = None) -> list[dict]:
+    """Парсер для Peace Quiz (peacequizkrg.kz, Tilda). Игры подгружаются
+    порциями по кнопке «ещё больше квизов» — её нажимает
+    _click_load_more(). Формат одной карточки:
+        ТЕОРИЯ БОЛЬШОГО ВЗРЫВА №1
+        8 ноября (воскресенье) | 17:00
+        3000тг/с игрока
+        То место, Абдирова, 5
+        ЗАРЕГИСТРИРОВАТЬСЯ
+        ПОДРОБНЕЕ
+    Названия на сайте набраны капсом, приводим к обычному виду."""
+    today = today or _today_almaty()
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    date_re = re.compile(r"^(\d{1,2}) ([а-яё]+) \([а-яё]+\) \| (\d{1,2}):(\d{2})$", re.I)
+    price_re = re.compile(r"^([\d\s\xa0]+)\s*(?:тг|тенге|₸|KZT)", re.I)
+    buttons = {"ЗАРЕГИСТРИРОВАТЬСЯ", "ПОДРОБНЕЕ"}
+
+    events = []
+    n = len(lines)
+    for i, l in enumerate(lines):
+        m = date_re.match(l)
+        if not m or i < 1 or i + 2 >= n:
+            continue
+        day, month_name, hh, mm = m.groups()
+        month = MONTHS_RU.get(month_name.lower())
+        if not month:
+            continue
+
+        pm = price_re.match(lines[i + 1])
+        price = int(re.sub(r"[\s\xa0]", "", pm.group(1))) if pm else None
+        place = lines[i + 2]
+        if place.upper() in buttons:
+            place = None
+
+        year = _resolve_year(month, int(day), today)
+        when = dt.datetime(year, month, int(day), int(hh), int(mm))
+        events.append({
+            "source": "Peace Quiz", "when": when, "title": _sentence_case(lines[i - 1]),
+            "price": price, "place": place,
+        })
+    return events
+
+
 # Парсеры, которые работают не с видимым текстом, а с исходным HTML страницы
 # (например, с данными, встроенными в страницу самим сайтом)
 RENDER_HTML_PARSERS = {
@@ -901,6 +989,7 @@ RENDER_TEXT_PARSERS = {
     "wowquiz": parse_wowquiz_text,
     "albertparty": parse_albertparty_text,
     "mzgb": parse_mzgb_text,
+    "peacequiz": parse_peacequiz_text,
 }
 
 
@@ -984,7 +1073,9 @@ async def process_site(site: dict) -> list[dict]:
         print("  [i] Встроенного JSON не нашли, рендерим через браузер (Playwright)...")
 
     try:
-        text, html = await render_with_playwright(site["url"], city_click=city_click)
+        text, html = await render_with_playwright(
+            site["url"], city_click=city_click, load_more=site.get("load_more_selector")
+        )
     except ModuleNotFoundError:
         print("  [!] Playwright не установлен. Выполните:")
         print("        pip install playwright")
