@@ -11,6 +11,7 @@
 - Вау Квиз      (krg.wowquiz.ru)          — Nuxt SPA
 - Эйнштейн Party (krg.albertparty.ru)     — сервер-рендер
 - MozgoQuiz     (krg.mzgb.net)            — список игр строится в браузере
+- Peace Quiz     (peacequizkrg.kz)         — Tilda, список строится в браузере
 
 Стратегия для каждого сайта:
   1) Быстрый путь: скачать голый HTML и поискать встроенный JSON-стейт
@@ -110,6 +111,14 @@ SITES = [
         "engine": "unknown",
         # список игр строится в браузере (на странице шаблоны вида
         # {{ upcomingGames }}), поэтому нужен рендер через Playwright
+        "skip_embedded_json": True,
+    },
+    {
+        "key": "peacequiz",
+        "name": "Peace Quiz",
+        "url": "https://peacequizkrg.kz/raspisanie_qaragandy",
+        "engine": "tilda",
+        # Tilda: в обычном HTML списка игр нет, он появляется в браузере
         "skip_embedded_json": True,
     },
 ]
