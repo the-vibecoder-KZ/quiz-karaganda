@@ -36,6 +36,7 @@
     python scrape.py
 """
 
+import asyncio
 import json
 import re
 import datetime as dt
@@ -60,6 +61,10 @@ SITES = [
         "name": "Квиз, плиз!",
         "url": "https://krg.quizplease.com/schedule",
         "engine": "nuxt",
+        # Иногда страница отдаёт пустое расписание (сайт режет запросы
+        # или карточки не успевают загрузиться) — пробуем ещё раз.
+        "retries": 2,
+        "retry_delay": 20,
     },
     {
         "key": "shakerquiz",
@@ -993,6 +998,17 @@ RENDER_TEXT_PARSERS = {
 }
 
 
+def _describe_page(text: str, html: str) -> str:
+    """Короткая сводка о том, что вернул сайт: заголовок вкладки, объём
+    текста и его начало. Если сайт отдал заглушку вместо расписания
+    ("Access denied", "Just a moment", капча), это будет видно прямо в логе,
+    без скачивания артефакта."""
+    m = re.search(r"<title[^>]*>(.*?)</title>", html or "", re.S | re.I)
+    title = re.sub(r"\s+", " ", m.group(1)).strip() if m else "—"
+    snippet = re.sub(r"\s+", " ", text or "").strip()[:160]
+    return f"заголовок вкладки: {title!r}; текста на странице: {len(text or '')} симв.; начало: {snippet!r}"
+
+
 async def process_html_site(site: dict, html_parser) -> list[dict]:
     """Сайты, у которых расписание лежит в самом HTML (в данных страницы).
     Сначала пробуем обычный HTTP-запрос — он быстрее и не требует браузера;
@@ -1029,6 +1045,8 @@ async def process_html_site(site: dict, html_parser) -> list[dict]:
         print(f"  [!] Не смогли распарсить HTML: {e}")
         return []
     print(f"  [+] Распарсили {len(events)} игр(ы) через браузер.")
+    if not events:
+        print(f"      [i] Игр не найдено. {_describe_page(text, html)}")
     return events
 
 
@@ -1072,38 +1090,58 @@ async def process_site(site: dict) -> list[dict]:
     else:
         print("  [i] Встроенного JSON не нашли, рендерим через браузер (Playwright)...")
 
-    try:
-        text, html = await render_with_playwright(
-            site["url"], city_click=city_click, load_more=site.get("load_more_selector")
-        )
-    except ModuleNotFoundError:
-        print("  [!] Playwright не установлен. Выполните:")
-        print("        pip install playwright")
-        print("        playwright install chromium")
-        return []
-    except Exception as e:
-        print(f"  [!] Не получилось отрендерить страницу: {e}")
-        return []
-
-    txt_path = DEBUG_DIR / f"{site['key']}_rendered.txt"
-    html_path = DEBUG_DIR / f"{site['key']}_rendered.html"
-    txt_path.write_text(text, encoding="utf-8")
-    html_path.write_text(html, encoding="utf-8")
-    print(f"  [+] Сохранили видимый текст -> {txt_path}")
-    print(f"  [+] Сохранили полный HTML   -> {html_path}")
-
     text_parser = RENDER_TEXT_PARSERS.get(site["key"])
-    if text_parser:
-        try:
-            events = text_parser(text)
-            print(f"      Распарсили {len(events)} игр(ы).")
-            return events
-        except Exception as e:
-            print(f"      [!] Не смогли распарсить текст: {e}")
-            return []
+    attempts = 1 + int(site.get("retries", 0))
+    delay = int(site.get("retry_delay", 20))
+    text = html = None
+    events: list[dict] = []
 
-    print("      Пришлите эти файлы (или хотя бы кусок с расписанием) — доточу парсер.")
-    return []
+    for attempt in range(1, attempts + 1):
+        try:
+            text, html = await render_with_playwright(
+                site["url"], city_click=city_click, load_more=site.get("load_more_selector")
+            )
+        except ModuleNotFoundError:
+            print("  [!] Playwright не установлен. Выполните:")
+            print("        pip install playwright")
+            print("        playwright install chromium")
+            return []
+        except Exception as e:
+            print(f"  [!] Не получилось отрендерить страницу: {e}")
+            text = html = None
+
+        if text is not None:
+            # Файлы для разбора; при повторных попытках перезаписываем
+            (DEBUG_DIR / f"{site['key']}_rendered.txt").write_text(text, encoding="utf-8")
+            (DEBUG_DIR / f"{site['key']}_rendered.html").write_text(html, encoding="utf-8")
+            if not text_parser:
+                break
+            try:
+                events = text_parser(text)
+            except Exception as e:
+                print(f"      [!] Не смогли распарсить текст: {e}")
+                events = []
+            if events:
+                break
+
+        if attempt < attempts:
+            what = _describe_page(text, html) if text is not None else "страница не загрузилась"
+            print(f"  [i] Игр не найдено (попытка {attempt} из {attempts}). {what}")
+            print(f"      Пробуем ещё раз через {delay} с...")
+            await asyncio.sleep(delay)
+
+    if text is None:
+        return []
+
+    print(f"  [+] Сохранили видимый текст -> {DEBUG_DIR / (site['key'] + '_rendered.txt')}")
+    print(f"  [+] Сохранили полный HTML   -> {DEBUG_DIR / (site['key'] + '_rendered.html')}")
+    if not text_parser:
+        print("      Пришлите эти файлы (или хотя бы кусок с расписанием) — доточу парсер.")
+        return []
+    print(f"      Распарсили {len(events)} игр(ы).")
+    if not events:
+        print(f"      [i] {_describe_page(text, html)}")
+    return events
 
 
 def print_weekly_summary(events: list[dict]) -> None:
