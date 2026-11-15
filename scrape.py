@@ -65,6 +65,9 @@ SITES = [
         # или карточки не успевают загрузиться) — пробуем ещё раз.
         "retries": 2,
         "retry_delay": 20,
+        # Карточки игр иногда рисуются с задержкой — ждём, пока на
+        # странице появится время игры ("19:30"), и только потом снимаем текст.
+        "wait_regex": r"\d{1,2}:\d{2}",
     },
     {
         "key": "shakerquiz",
@@ -170,6 +173,23 @@ def try_fetch_embedded_json(url: str) -> dict | None:
     return None
 
 
+async def _wait_for_text(page, pattern: str, timeout_ms: int = 20000) -> bool:
+    """Ждём, пока в видимом тексте страницы появится совпадение с
+    регулярным выражением (например, время игры "19:30"). Так мы
+    дожидаемся, когда карточки реально нарисованы, а не гадаем с
+    фиксированной паузой. Возвращает False, если не дождались — тогда
+    просто работаем с тем, что есть."""
+    try:
+        await page.wait_for_function(
+            "p => new RegExp(p).test(document.body.innerText)",
+            arg=pattern,
+            timeout=timeout_ms,
+        )
+        return True
+    except Exception:
+        return False
+
+
 async def _click_load_more(page, selector: str, max_clicks: int = 15) -> int:
     """Нажимаем кнопку «показать ещё», пока она видна и после клика на
     странице появляется новый текст. Возвращает число успешных нажатий.
@@ -197,7 +217,7 @@ async def _click_load_more(page, selector: str, max_clicks: int = 15) -> int:
     return clicks
 
 
-async def render_with_playwright(url: str, wait_selector: str | None = None, city_click: str | None = None, load_more: str | None = None):
+async def render_with_playwright(url: str, wait_selector: str | None = None, city_click: str | None = None, load_more: str | None = None, wait_regex: str | None = None):
     """Открываем страницу настоящим headless-браузером, ждём отрисовки
     и возвращаем видимый текст body. Требует `playwright install chromium`.
 
@@ -253,6 +273,9 @@ async def render_with_playwright(url: str, wait_selector: str | None = None, cit
                 print(f"      [+] Город «{city_click}» выбран, диалог закрылся.")
             except Exception as e:
                 print(f"      [!] Не удалось выбрать город «{city_click}»: {e}")
+
+        if wait_regex:
+            await _wait_for_text(page, wait_regex)
 
         if load_more:
             await _click_load_more(page, load_more)
@@ -1099,7 +1122,8 @@ async def process_site(site: dict) -> list[dict]:
     for attempt in range(1, attempts + 1):
         try:
             text, html = await render_with_playwright(
-                site["url"], city_click=city_click, load_more=site.get("load_more_selector")
+                site["url"], city_click=city_click, load_more=site.get("load_more_selector"),
+                wait_regex=site.get("wait_regex"),
             )
         except ModuleNotFoundError:
             print("  [!] Playwright не установлен. Выполните:")
