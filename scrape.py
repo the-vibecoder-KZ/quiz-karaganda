@@ -882,10 +882,115 @@ def _parse_quizplease_new_format(text: str, today: dt.date | None = None) -> lis
     return events
 
 
+def _parse_quizplease_current_format(text: str, today: dt.date | None = None) -> list[dict]:
+    """Вёрстка Квиз, плиз! с ноября 2026. Лента карточек по датам. Карточка:
+        22 ноября                              <- заголовок группы дня
+        Воскресенье · 1 игра
+        22
+        НОЯБ
+        Квиз, плиз! [изи] KRG #17              <- название
+        Вопросы на самые разные темы ...        <- описание
+        Тематика
+        Классика
+        вс, 22 ноября                          <- дата карточки
+        ·
+        19:30                                  <- время (отдельной строкой)
+        Бочонок                                <- заведение
+        Караганда, улица Чкалова, 6а           <- адрес
+        На карте
+        Записаться
+        3000 ₸/чел.
+        Подробнее
+    Вверху страницы ещё есть полоска дат ("19 / сегодня / 20 / пт ...") —
+    её строки не похожи на карточку, потому что после них нет времени.
+    Датой карточки может быть и слово: "сегодня", "завтра"."""
+    today = today or _today_almaty()
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    wd = "пн|вт|ср|чт|пт|сб|вс"
+    date_line_re = re.compile(
+        rf"^(?:{wd}|сегодня|завтра|послезавтра)(?:,\s*(\d{{1,2}}) ([а-яё]+))?$", re.I
+    )
+    time_re = re.compile(r"^(\d{1,2}):(\d{2})$")
+    price_re = re.compile(r"^([\d\s\xa0]+)\s*₸")
+    title_res = [re.compile(r"KRG\s*#\s*\d+", re.I), re.compile(r"#\s*\d+")]
+    offsets = {"сегодня": 0, "завтра": 1, "послезавтра": 2}
+
+    events = []
+    n = len(lines)
+    for i, l in enumerate(lines):
+        m = date_line_re.match(l)
+        if not m:
+            continue
+        # дальше должно идти время (возможно, после разделителя "·")
+        j = i + 1
+        if j < n and lines[j] == "·":
+            j += 1
+        if j >= n:
+            continue
+        tm = time_re.match(lines[j])
+        if not tm:
+            continue
+
+        day_s, month_name = m.groups()
+        if day_s and MONTHS_RU.get(month_name.lower()):
+            month = MONTHS_RU[month_name.lower()]
+            game_date = dt.date(_resolve_year(month, int(day_s), today), month, int(day_s))
+        else:
+            word = l.split(",")[0].strip().lower()
+            if word not in offsets:
+                continue  # просто "пн" без даты — это не карточка
+            game_date = today + dt.timedelta(days=offsets[word])
+
+        # название: ближайшая выше строка с "KRG #<номер>"
+        title = None
+        for rx in title_res:
+            for k in range(i - 1, max(i - 12, -1), -1):
+                if rx.search(lines[k]):
+                    title = lines[k]
+                    break
+            if title:
+                break
+        if title is None:
+            # запасной путь: название стоит за две строки до метки "Тематика"
+            for k in range(i - 1, max(i - 8, 1), -1):
+                if lines[k] == "Тематика":
+                    title = lines[k - 2]
+                    break
+        if title is None:
+            title = lines[i - 1] if i else "Квиз, плиз!"
+
+        venue = lines[j + 1] if j + 1 < n else ""
+        address = lines[j + 2] if j + 2 < n else ""
+        if address in ("На карте", "Записаться", "Подробнее"):
+            address = ""
+        # город в адресе лишний: "Караганда, улица Чкалова, 6а" -> "улица Чкалова, 6а"
+        address = re.sub(r"^Караганда,\s*", "", address)
+
+        price = None
+        for k in range(j + 1, min(j + 9, n)):
+            pm = price_re.match(lines[k])
+            if pm:
+                price = int(re.sub(r"[\s\xa0]", "", pm.group(1)))
+                break
+
+        when = dt.datetime(game_date.year, game_date.month, game_date.day,
+                           int(tm.group(1)), int(tm.group(2)))
+        place = ", ".join(p for p in (venue, address) if p) or None
+        events.append({
+            "source": "Квиз, плиз!", "when": when, "title": title,
+            "price": price, "place": place,
+        })
+    return events
+
+
 def parse_quizplease_text(text: str, today: dt.date | None = None) -> list[dict]:
-    """Квиз, плиз!: сначала пробуем актуальную вёрстку, если игр не
-    нашлось — прежнюю (на случай, если сайт вернёт старый вид)."""
-    return _parse_quizplease_new_format(text, today) or _parse_quizplease_old_format(text, today)
+    """Квиз, плиз!: сайт несколько раз менял вёрстку, поэтому пробуем по
+    очереди актуальный вид и два прежних — берём первый, где нашлись игры."""
+    return (
+        _parse_quizplease_current_format(text, today)
+        or _parse_quizplease_new_format(text, today)
+        or _parse_quizplease_old_format(text, today)
+    )
 
 
 def parse_mzgb_text(text: str, today: dt.date | None = None) -> list[dict]:
